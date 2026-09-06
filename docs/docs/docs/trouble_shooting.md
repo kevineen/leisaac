@@ -6,7 +6,7 @@ Isaac Sim and Isaac Lab need NVIDIA + CUDA. AMD Radeon AI PRO R9700 (ROCm) canno
 
 - Train on this PC with conda env `lerobot-rocm` and [kevineen/lerobot](https://github.com/kevineen/lerobot) (`feat/rocm-train`).
 - Collect sim data on another NVIDIA machine, NVIDIA cloud, or after swapping this PC to NVIDIA.
-- Do not replace Isaac with MuJoCo on this fork.
+- Do not replace Isaac with MuJoCo inside LeIsaac. For a parallel MuJoCo route on this PC, see [note.txt — MuJoCo 調査結果](https://github.com/kevineen/leisaac/blob/feat/mujoco-feasibility-notes/note.txt).
 
 See [Fork: training PC](/docs/getting_started/fork_training_pc) and [note.txt](https://github.com/kevineen/leisaac/blob/feat/training-pc/note.txt).
 

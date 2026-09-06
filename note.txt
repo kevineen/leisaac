@@ -1,6 +1,6 @@
 # LeIsaac 作業メモ（学習用 PC）
 
-最終更新: 2026-09-06
+最終更新: 2026-09-06（MuJoCo 技術調査追記）
 
 ## 運用方針（重要）
 
@@ -28,7 +28,7 @@
 | ラズパイ4 | 実機テレオペ / 推論デプロイ | lerobot（実機側） |
 
 - **現状の R9700 では Isaac Sim / Isaac Lab は動かない**（NVIDIA + CUDA 前提）。詳細は下の「B: Isaac Sim」。
-- MuJoCo 等への置き換えは LeIsaac の価値が落ちるので **計画どおり範囲外**。
+- **Isaac を MuJoCo に置き換えない**（LeIsaac 本体の価値を落とすため）。R9700 上の MuJoCo は **lerobot 側の並行ルート**として検討可 → 「MuJoCo 調査結果」。
 - 学習済みモデル・データセットはパスや転送手順でパイ側と共有する。
 - 関連: ~/robot/lerobot （origin: kevineen/lerobot, upstream: huggingface/lerobot）
 
@@ -239,7 +239,8 @@ python --version   # 3.11.x であること
 #### B: Isaac Sim（この PC では動かない）
 
 Isaac Sim / Isaac Lab は NVIDIA GPU + CUDA 前提。R9700 / ROCm では起動しない。
-**MuJoCo など別シミュレータへの置き換えはしない**（LeIsaac のタスク・USD・変換経路の価値が落ちるため）。
+**LeIsaac 内で Isaac を MuJoCo に置き換えない**（タスク・USD・`isaaclab2lerobot*` 経路の価値を落とすため）。
+R9700 で Sim っぽいことをするなら **別パイプライン**（下の「MuJoCo 調査結果」）。
 
 取れる道は次の2つ。併用してもよい。
 
@@ -391,6 +392,57 @@ lerobot-train \
 - ROCm torchvision には `VideoReader` が無い。
 - llama.cpp（Qwen 27B 等）と同時に GPU 学習すると VRAM 不足。どちらか一方。
 - HDF5→LeRobot 変換（`isaaclab2lerobotv3.py`）は Isaac 必須。データは別 NVIDIA 機 / Hub / 実機 `lerobot-record`。
+
+---
+
+## MuJoCo 調査結果（2026-09-06・実装なし）
+
+**結論:** Isaac を MuJoCo に置き換えない。R9700 で Sim が必要なら **lerobot 側の並行ルート**（Track A または so101-nexus）を別 env で試す。LeIsaac 本体への MuJoCo 差し込みはしない。
+
+棚卸し時点の版:
+
+| 項目 | 値 |
+|------|-----|
+| kevineen/lerobot | `feat/rocm-train` / **0.5.2** |
+| `lerobot-rocm` | torch `2.11.0+rocm7.14.1`、**mujoco 未インストール** |
+| uv.lock の mujoco | **3.7.0**（extras 経由） |
+| ホスト GL | `libegl1` / `libosmesa6` あり → `MUJOCO_GL=egl` 候補 |
+
+### Track A — LeRobot 標準 MuJoCo（ベンチマーク）
+
+対象 extras: `libero` / `metaworld` / `aloha` / `hilserl`（Franka `gym_hil`）。
+
+| | |
+|--|--|
+| 可否 | **可（見込み）**。物理は CPU/MuJoCo、描画は EGL。NVIDIA 必須ではない |
+| 前提 | `pip install -e ".[libero]"` 等（AMD extra-index を付けて ROCm torch を壊さない）。`export MUJOCO_GL=egl` |
+| 工数 | **0.5〜2 日**（インストール〜 `lerobot-eval` スモーク） |
+| リスク | SO101 / LeIsaac タスクとは**非互換**。`hilserl` 公式ガイドは「Nvidia GPU」と書くが、中身は Franka MuJoCo。依存が本線 torch を置き換える可能性 |
+
+### Track B — SO101 MuJoCo（コミュニティ）
+
+| 資産 | 可否 | 版・メモ | 工数感 |
+|------|------|----------|--------|
+| [mujoco_menagerie `robotstudio_so101`](https://github.com/google-deepmind/mujoco_menagerie/tree/main/robotstudio_so101) | MJCF のみ可 | MuJoCo ≥3.1.3。タスク・teleop・LeRobot 配線なし | モデル確認のみ半日 |
+| [lerobot-env-so101](https://pypi.org/project/lerobot-env-so101/) 0.2.1 | **standalone gym は可** / **本 fork の plugin 統合は不可** | `mujoco>=3,<4`。公式は **lerobot v0.6.0+** の `lerobot_env_*` 検出。こちらの 0.5.2 の `register_third_party_plugins` は `lerobot_robot_*` 等のみで **env プラグインを拾わない**。pick-cube・位置 IK のみ。モータパラ未検証。top-down grasp 未達 | 単体検証 1〜2 日。本線統合は lerobot 上げが先 |
+| [so101-nexus](https://github.com/johnsutor/so101-nexus) 0.5.4 | **最も有望（SO101 収集）** | Python ≥3.12。`teleop` extra が `lerobot[feetech]>=0.5,<0.6` → **0.5.2 と整合**。leader → MuJoCo follower → LeRobot v3。Warp は **NVIDIA/CUDA のみ**。`[rocm]` extra あり（**別 env 推奨**。本線 torch と衝突しうる） | 別 env で e2e **3〜7 日** |
+
+LeIsaac タスク（PickOrange 等）との観測・アクション空間は一致しない想定。データ混在・sim2real はそのままでは期待しない。
+
+### Track C — LeIsaac 内置き換え
+
+| | |
+|--|--|
+| 可否 | **不可（方針＋技術）** |
+| 根拠 | 収集が Isaac Lab / USD / PhysX。`isaaclab2lerobotv3.py` が `AppLauncher` 必須。`ISAAC_SUPPORTED` はゲートのみでシミュレータ差し替え API なし。`source/leisaac/` に MuJoCo バックエンドなし |
+| 「MuJoCo 機能追加」の意味 | LeIsaac への差し込みではなく、**Track A/B の別パイプライン** |
+
+### 次にやるなら（1つ）
+
+**Track A のスモーク**を、本線を汚さない **一時 / 別 conda env**（または慎重な editable extras）で実施する。  
+手順の骨格: `MUJOCO_GL=egl` → `pip install -e ".[metaworld]"` または `".[libero]"`（AMD index 維持）→ `lerobot-eval --env.type=metaworld`（または libero）の短エピソード。
+
+SO101 のデモ収集が主目的になったら、その次に **so101-nexus を別 env** で試す（Warp は使わない）。
 
 ---
 
@@ -584,9 +636,12 @@ C（ROCm 学習コア）は `feat/rocm-train` で実装済み:
 - [x] GPU 方針: Isaac は NVIDIA 差し替えまで保留。学習は Radeon / ROCm で先行
 - [x] `lerobot-rocm`（Python 3.12 + PyTorch ROCm gfx1201）+ kevineen/lerobot editable
 - [x] ACT / SmolVLA スモーク学習（CKPT は `models/checkpoints/*-rocm-smoke`）
-- [x] B: note に「別 NVIDIA 機で Sim / この PC は学習」と「差し替え後再開手順」を固める（MuJoCo は範囲外）
+- [x] B: note に「別 NVIDIA 機で Sim / この PC は学習」と「差し替え後再開手順」を固める
 - [x] C: device_utils の ROCm 明示 / groot SDPA / torchcodec は入れない
 - [x] 任意: diffusion 10 step スモーク（`diffusion-rocm-smoke`）
+- [x] MuJoCo 技術調査（実装なし）→ 「MuJoCo 調査結果」。Isaac 置き換えはしない
+- [ ] 任意: Track A スモーク（`lerobot[libero]` or `metaworld` + `MUJOCO_GL=egl`）。本線 env 汚染に注意
+- [ ] 任意: Track B で so101-nexus を **別 conda env** で試す（teleop → dataset）
 - [ ] 任意: pi0 スモーク（gated `google/paligemma-3b-pt-224`。HF login + アクセス許可が先）
 - [ ] NVIDIA 差し替え後 **または** 別 NVIDIA 機: CUDA / isaacsim / IsaacLab / leisaac インストール（B の手順）
 - [x] 最初の改造（パス・設定・依存・ROCm 方針・ドキュメント）を commit / push（origin のみ。本家 PR しない）
@@ -615,5 +670,5 @@ C（ROCm 学習コア）は `feat/rocm-train` で実装済み:
 | `pip` が公式 CUDA torch に戻す | `--extra-index-url https://repo.amd.com/rocm/whl-multi-arch/` を付ける。`leisaac` env に ROCm torch を入れない |
 | `flash-attn` が入らない / undefined symbol | ROCm では入れない。groot は SDPA。CUDA 機だけ任意インストール |
 | `torchcodec` で落ちる | 入れない。uninstall して `video_backend=pyav` |
-| Isaac Sim が起動しない（R9700） | 仕様。別 NVIDIA 機か差し替え後。MuJoCo 置き換えはしない |
+| Isaac Sim が起動しない（R9700） | 仕様。別 NVIDIA 機か差し替え後。LeIsaac 内の MuJoCo 置き換えはしない（並行ルートは「MuJoCo 調査結果」） |
 | pi0 が gated repo で落ちる | `google/paligemma-3b-pt-224`。HF で許可 → `huggingface-cli login`。ROCm とは別件 |

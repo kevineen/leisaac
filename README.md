@@ -2,7 +2,7 @@
 
 > **このリポジトリは [kevineen/leisaac](https://github.com/kevineen/leisaac) fork です。公式 (LightwheelAI) へは PR しません。**
 > 学習 PC（AMD Radeon / ROCm）向けのパス・GPU 切替・Isaac 運用は [note.txt](note.txt) と [Fork: training PC](docs/docs/docs/getting_started/fork_training_pc.md) を見てください。
-> Isaac Sim は NVIDIA + CUDA 前提です。R9700 では動きません（MuJoCo 置き換えは範囲外）。
+> Isaac Sim は NVIDIA + CUDA 前提です。R9700 では動きません（LeIsaac 内の MuJoCo **置き換え**はしない。並行ルートは [note.txt「MuJoCo 調査結果」](note.txt)）。
 
 https://github.com/user-attachments/assets/763acf27-d9a9-4163-8651-3ba0a6a185d7
 

@@ -7,7 +7,7 @@ On this fork (`kevineen/leisaac`):
 
 - **This PC (R9700):** train only with `lerobot-rocm`. Do **not** install CUDA / isaacsim into the `leisaac` conda env.
 - **Sim / HDF5 collection:** another NVIDIA machine, NVIDIA cloud (for example [NVIDIA Brev](/docs/cloud_simulation/nvidia_brev)), or this PC after an NVIDIA GPU swap.
-- Do **not** replace Isaac with MuJoCo.
+- Do **not** replace Isaac with MuJoCo inside LeIsaac. A parallel MuJoCo path on the training PC (lerobot extras / community SO101 stacks) is documented in [note.txt — MuJoCo 調査結果](https://github.com/kevineen/leisaac/blob/feat/mujoco-feasibility-notes/note.txt).
 - Do **not** `pip install -e "source/leisaac[lerobot]"` (that pulls PyPI `lerobot==0.4.2`). Use the [kevineen/lerobot](https://github.com/kevineen/lerobot) fork (`feat/rocm-train`) in the `lerobot-rocm` env.
 
 Full paths, env files, and resume steps: [note.txt](https://github.com/kevineen/leisaac/blob/main/note.txt) and [Fork: training PC](/docs/getting_started/fork_training_pc).

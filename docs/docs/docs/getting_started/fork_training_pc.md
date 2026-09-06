@@ -11,7 +11,7 @@
 | `lerobot-train` (ACT / SmolVLA / diffusion など) | 可（`lerobot-rocm`） | CUDA でも可 |
 | 実機テレオペ | ラズパイ4 | — |
 
-MuJoCo などへのシミュレータ置き換えはしません。LeIsaac の価値（USD・Isaac タスク・変換経路）を落とすためです。
+MuJoCo などへのシミュレータ**置き換えはしません**（LeIsaac の USD・Isaac タスク・変換経路を守るため）。R9700 上で MuJoCo を使う場合は **lerobot 側の並行ルート**とし、詳細は [note.txt の「MuJoCo 調査結果」](https://github.com/kevineen/leisaac/blob/feat/mujoco-feasibility-notes/note.txt) を参照。
 
 ## 環境
 
