@@ -1,6 +1,6 @@
 # LeIsaac 作業メモ（学習用 PC）
 
-最終更新: 2026-09-06（MuJoCo 技術調査追記）
+最終更新: 2026-09-06（ROS2 並行パイプライン追記）
 
 ## 運用方針（重要）
 
@@ -22,15 +22,16 @@
 
 | マシン | 役割 | リポジトリ |
 |--------|------|------------|
-| この PC（学習用 / R9700） | **学習のみ**（ROCm / `lerobot-rocm`） | kevineen/lerobot（`feat/rocm-train`） |
+| この PC（学習用 / R9700） | **学習**（ROCm / `lerobot-rocm`）+ **ROS2/MuJoCo 並行ルート** | kevineen/lerobot + `~/robot/so101_ros2_ws` |
 | NVIDIA 機 or クラウド（別機） | Isaac Sim / Isaac Lab の収集・変換 | leisaac + Isaac Lab |
 | この PC（NVIDIA 差し替え後） | Sim と学習を同居できる | `leisaac` env + `lerobot-rocm` |
-| ラズパイ4 | 実機テレオペ / 推論デプロイ | lerobot（実機側） |
+| ラズパイ4 | 実機テレオペ / 推論デプロイ | lerobot（HTTP 残置）+ **ROS2 Jazzy 本線** |
 
 - **現状の R9700 では Isaac Sim / Isaac Lab は動かない**（NVIDIA + CUDA 前提）。詳細は下の「B: Isaac Sim」。
-- **Isaac を MuJoCo に置き換えない**（LeIsaac 本体の価値を落とすため）。R9700 上の MuJoCo は **lerobot 側の並行ルート**として検討可 → 「MuJoCo 調査結果」。
+- **Isaac を MuJoCo に置き換えない**（LeIsaac 本体の価値を落とすため）。ROS2+MuJoCo は **別パイプライン** → 「ROS2 並行パイプライン」。
 - 学習済みモデル・データセットはパスや転送手順でパイ側と共有する。
 - 関連: ~/robot/lerobot （origin: kevineen/lerobot, upstream: huggingface/lerobot）
+- 関連: ~/robot/so101_ros2_ws （ROS2 Jazzy / MuJoCo / so101-ros-physical-ai）
 
 公式ドキュメント: https://lightwheelai.github.io/leisaac/
 本家: https://github.com/LightwheelAI/leisaac
@@ -446,6 +447,65 @@ SO101 のデモ収集が主目的になったら、その次に **so101-nexus �
 
 ---
 
+## ROS2 並行パイプライン（2026-09-06）
+
+**結論:** LeIsaac / Isaac は触らない。制御の中核は ROS 2、学習は `lerobot-rocm`。ワークスペースは `~/robot/so101_ros2_ws`。
+
+### 設計の実測メモ（計画との差分）
+
+| 計画 | 実測 |
+|------|------|
+| ROS 2 Humble / Ubuntu 22.04 | ホストは **Ubuntu 26.04**。Humble apt 不可。`so101-ros-physical-ai` は **Jazzy** 前提 → **RoboStack Jazzy**（`~/micromamba/envs/ros-jazzy`） |
+| Pi4 Humble | Pi も **Ubuntu 24.04 + Jazzy** で揃える（`scripts/pi4_install_jazzy.sh`） |
+| データ `/mnt/shared_hdd/robot` | HDD 未マウント時は `~/robot/so101_ros2_ws/data` にフォールバック |
+
+### 起動早見
+
+```bash
+source ~/robot/so101_ros2_ws/scripts/env.sh
+./scripts/bringup_mujoco_sim.sh          # MuJoCo + ros2_control
+./scripts/record_episode.sh mujoco_smoke 5
+./scripts/convert_to_lerobot.sh $ROBOT_DATA_ROOT/datasets/ros2_episodes/mujoco_smoke local/so101_ros2_mujoco
+./scripts/train_act_lerobot_rocm.sh local/so101_ros2_mujoco
+./scripts/package_deploy_ckpt.sh $ROBOT_DATA_ROOT/models/checkpoints/so101_ros2_act_smoke so101_ros2_act_smoke
+# Pi: scp scripts/pi4_install_jazzy.sh … → bringup_pi_real.sh
+# PC policy_server + Pi async: run_policy_server.sh / run_inference.sh
+```
+
+詳細: [`~/robot/so101_ros2_ws/README.md`](/home/kevin/robot/so101_ros2_ws/README.md)
+
+### 役割分担（ROS2 ルート）
+
+| 層 | 実装 |
+|----|------|
+| Sim | `mujoco_ros2_control` + `so_arm101_description`（`launch/mujoco_so101_bringup.launch.py`） |
+| Real | `feetech_ros2_driver` + `so101_bringup`（Pi） |
+| 収集 | `ros2 bag record`（スモーク）/ `recording_session.launch.py`（本番カメラ） |
+| 変換 | `scripts/joints_mcap_to_lerobot.py`（関節スモーク）/ 本家 `rosbag_to_lerobot`+`so101.yaml`（カメラ付き） |
+| 学習 | `lerobot-rocm` / `train_act_lerobot_rocm.sh` |
+| 推論 | sync: `lerobot_inference_node` / async: PC `policy_server` + Pi `async_inference_node` |
+
+### 既存 trainswap HTTP との関係
+
+`lerobot-so101-primitive-server`（HTTP）は **残置**。ROS2 経路が安定するまで並行。本線の実機制御は ROS2 `ros2_control`（Sim と同コントローラ名）。
+
+### 検証済み（この PC）
+
+- [x] RoboStack Jazzy + colcon build（so101 / mujoco / feetech）
+- [x] MuJoCo headless bringup + `/joint_states`
+- [x] mock コントローラ名パリティ（`verify_controller_parity.sh`）
+- [x] MCAP 記録 → LeRobot 変換 → ACT 50 step 学習
+- [x] `models/deploy` 梱包 + 推論ノード存在確認
+- [ ] Pi4 実機 bringup（`pi4_install_jazzy.sh` をパイで実行）
+
+### 注意
+
+- ROS env と `lerobot-rocm` を同じシェルで混ぜない
+- 実機前に LeRobot モータ setup / calibrate 必須
+- 関節順: `shoulder_pan_joint` … `gripper_joint`
+
+---
+
 ## データ・モデル保存パス / マシン設定（.env.local）使い方
 
 大容量は git 外の共有 HDD に置く（作成済み）。**マシンごとのパス・役割・GPU は `.env.local` で管理する**（`.gitignore` 済み・git に乗せない）。
@@ -640,6 +700,7 @@ C（ROCm 学習コア）は `feat/rocm-train` で実装済み:
 - [x] C: device_utils の ROCm 明示 / groot SDPA / torchcodec は入れない
 - [x] 任意: diffusion 10 step スモーク（`diffusion-rocm-smoke`）
 - [x] MuJoCo 技術調査（実装なし）→ 「MuJoCo 調査結果」。Isaac 置き換えはしない
+- [x] ROS2 並行パイプライン（`~/robot/so101_ros2_ws`）: MuJoCo sim → 変換 → ACT 学習 → deploy 梱包。詳細は「ROS2 並行パイプライン」
 - [ ] 任意: Track A スモーク（`lerobot[libero]` or `metaworld` + `MUJOCO_GL=egl`）。本線 env 汚染に注意
 - [ ] 任意: Track B で so101-nexus を **別 conda env** で試す（teleop → dataset）
 - [ ] 任意: pi0 スモーク（gated `google/paligemma-3b-pt-224`。HF login + アクセス許可が先）
@@ -647,7 +708,8 @@ C（ROCm 学習コア）は `feat/rocm-train` で実装済み:
 - [x] 最初の改造（パス・設定・依存・ROCm 方針・ドキュメント）を commit / push（origin のみ。本家 PR しない）
 - [ ] 任意: `~/.bashrc` に `source ~/robot/leisaac/scripts/env/load_env.sh` を追記
 - [ ] 公式の大幅更新時に、sync ブランチでの取り込みを一度試す
-- [ ] ラズパイへのモデル受け渡し手順を追記（`models/deploy` → パイ）
+- [x] ラズパイへのモデル受け渡し手順を追記（ROS2: `package_deploy_ckpt.sh` → `models/deploy` → Pi）。旧 HTTP trainswap は残置
+- [ ] Pi4 で `pi4_install_jazzy.sh` + `bringup_pi_real.sh` を実機実行
 
 ---
 
