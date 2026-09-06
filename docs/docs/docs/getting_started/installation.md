@@ -1,5 +1,18 @@
 # Installation
 
+::::warning[This fork / AMD Radeon]
+Isaac Sim and Isaac Lab need **NVIDIA GPU + CUDA**. They will not run on AMD Radeon (ROCm), including Radeon AI PRO R9700.
+
+On this fork (`kevineen/leisaac`):
+
+- **This PC (R9700):** train only with `lerobot-rocm`. Do **not** install CUDA / isaacsim into the `leisaac` conda env.
+- **Sim / HDF5 collection:** another NVIDIA machine, NVIDIA cloud (for example [NVIDIA Brev](/docs/cloud_simulation/nvidia_brev)), or this PC after an NVIDIA GPU swap.
+- Do **not** replace Isaac with MuJoCo.
+- Do **not** `pip install -e "source/leisaac[lerobot]"` (that pulls PyPI `lerobot==0.4.2`). Use the [kevineen/lerobot](https://github.com/kevineen/lerobot) fork (`feat/rocm-train`) in the `lerobot-rocm` env.
+
+Full paths, env files, and resume steps: [note.txt](https://github.com/kevineen/leisaac/blob/main/note.txt) and [Fork: training PC](/docs/getting_started/fork_training_pc).
+::::
+
 ## 1. Environment Setup
 
 ### Install as a Package
@@ -79,13 +92,14 @@ If you are using a 50-series GPU, we recommend using IsaacSim 5.0+ and IsaacLab 
 
 We also provide integration with LeRobot. In certain cases, you may need the lerobot dependency, such as for data conversion, lerobot dataset recorder, lerobot model inference, and envhub support. This is optional; you can install lerobot alongside leisaac when you need these features.
 
-```bash
-# Install with lerobot
-pip install -e "source/leisaac[lerobot]"
+Official extra (do **not** use on this fork's training PC — it installs PyPI `lerobot==0.4.2`):
 
-# Fix numpy version
-pip install numpy==1.26.0
+```bash
+# pip install -e "source/leisaac[lerobot]"
+# pip install numpy==1.26.0
 ```
+
+This fork: editable-install [kevineen/lerobot](https://github.com/kevineen/lerobot) (`feat/rocm-train`) into conda env `lerobot-rocm`. See [Fork: training PC](/docs/getting_started/fork_training_pc).
 
 ## 2. Asset Preparation
 

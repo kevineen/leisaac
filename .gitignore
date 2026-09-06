@@ -1,3 +1,7 @@
+# Machine-local env (paths / GPU / role) — keep .env.example tracked
+.env.local
+.env.*.local
+
 # C++
 **/cmake-build*/
 **/build*/

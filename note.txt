@@ -1,0 +1,619 @@
+# LeIsaac 作業メモ（学習用 PC）
+
+最終更新: 2026-09-06
+
+## 運用方針（重要）
+
+- **公式（LightwheelAI/leisaac）へはプルリクを出さない。**
+- 改造・実験・日常の更新は **すべて自分の fork（kevineen/leisaac）だけで続ける。**
+- 公式の更新は、**大幅なアップデート（リリース・breaking change・欲しい機能）のときだけ** `upstream/main` から取り込む。
+- 細かい本家コミットを毎回追わない。取り込み頻度より、自分の改造が壊れないことを優先する。
+
+流れのイメージ:
+
+```text
+日常:   自分の fork で改造 → origin に push
+ときどき: upstream/main（公式）を確認 → 必要なときだけ merge → origin に push
+```
+
+---
+
+## 役割分担
+
+| マシン | 役割 | リポジトリ |
+|--------|------|------------|
+| この PC（学習用 / R9700） | **学習のみ**（ROCm / `lerobot-rocm`） | kevineen/lerobot（`feat/rocm-train`） |
+| NVIDIA 機 or クラウド（別機） | Isaac Sim / Isaac Lab の収集・変換 | leisaac + Isaac Lab |
+| この PC（NVIDIA 差し替え後） | Sim と学習を同居できる | `leisaac` env + `lerobot-rocm` |
+| ラズパイ4 | 実機テレオペ / 推論デプロイ | lerobot（実機側） |
+
+- **現状の R9700 では Isaac Sim / Isaac Lab は動かない**（NVIDIA + CUDA 前提）。詳細は下の「B: Isaac Sim」。
+- MuJoCo 等への置き換えは LeIsaac の価値が落ちるので **計画どおり範囲外**。
+- 学習済みモデル・データセットはパスや転送手順でパイ側と共有する。
+- 関連: ~/robot/lerobot （origin: kevineen/lerobot, upstream: huggingface/lerobot）
+
+公式ドキュメント: https://lightwheelai.github.io/leisaac/
+本家: https://github.com/LightwheelAI/leisaac
+自分の fork: https://github.com/kevineen/leisaac
+
+この fork 向けの短い案内: [docs/.../fork_training_pc.md](docs/docs/docs/getting_started/fork_training_pc.md)（README / Installation / Troubleshooting からもリンク）。
+
+---
+
+## remote 構成
+
+```text
+origin    git@github.com:kevineen/leisaac.git              # 自分の fork（唯一の push 先）
+upstream  https://github.com/LightwheelAI/leisaac.git      # 本家（取り込み専用・push しない）
+```
+
+確認:
+
+```bash
+cd ~/robot/leisaac
+git remote -v
+```
+
+`git push upstream ...` は使わない（権限もない想定）。
+
+---
+
+## GitHub 認証（SSH）
+
+このマシンは HTTPS パスワード認証不可。SSH 鍵（~/.ssh/id_ed25519）を使う。
+
+初回・再ログイン後:
+
+```bash
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
+# パスフレーズ入力
+
+ssh -T git@github.com
+# Hi kevineen! ... が出れば OK
+```
+
+push 失敗（Permission denied / Authentication failed）のときは、まず上記をやり直す。
+
+---
+
+## 日常の改造（自分の fork だけ）
+
+### 1. 作業ブランチを切る
+
+main 直編集は避ける。
+
+```bash
+cd ~/robot/leisaac
+git checkout main
+git pull origin main
+git checkout -b feat/<短い名前>
+# 例: feat/training-pc
+```
+
+### 2. 改造の優先順位（学習 PC 向け）
+
+1. Installation をこの PC の GPU / 環境に合わせる
+   https://lightwheelai.github.io/leisaac/docs/getting_started/installation
+2. 依存の lerobot を自分の fork（~/robot/lerobot）に向ける
+3. データ・モデル保存先を決める（例: /mnt/shared_hdd/...）
+4. 必要なら環境・タスク・変換スクリプトを追加
+5. 学習結果をラズパイへ渡す手順を README かこの note に追記
+
+### 3. コミット & push（origin のみ）
+
+```bash
+git status
+git add <変更ファイル>
+git commit -m "変更の理由を短く"
+git push -u origin HEAD
+```
+
+必要なら自分の fork 内で PR（`feat/*` → `main`）を作ってもよい。**本家向け PR は作らない。**
+
+### 4. 自分の main に取り込む
+
+```bash
+git checkout main
+git merge feat/<名前>
+git push origin main
+```
+
+---
+
+## 公式の大幅アップデートを取り込む
+
+こまめな追従はしない。次のようなときだけ取り込む。
+
+- 公式が大きなバージョンアップをした
+- 欲しい機能・ロボット・ポリシー対応が増えた
+- 依存（Isaac Lab / LeRobot）の互換が大きく変わった
+
+### 取り込む前
+
+```bash
+cd ~/robot/leisaac
+git fetch upstream
+
+# 公式 main がどれだけ進んだか確認
+git log --oneline main..upstream/main | head -50
+
+# リリースノートや README / News も見る
+# https://github.com/LightwheelAI/leisaac/releases
+# https://github.com/LightwheelAI/leisaac/blob/main/README.md
+```
+
+差分が大きい・怖いときは、取り込み専用ブランチで試す。
+
+```bash
+git checkout main
+git pull origin main
+git checkout -b sync/upstream-$(date +%Y%m%d)
+git merge upstream/main
+# コンフリクト解消・動作確認
+# 問題なければ main に merge して origin へ push
+git checkout main
+git merge sync/upstream-$(date +%Y%m%d)
+git push origin main
+```
+
+問題なさそうなら main に直接 merge してもよい。
+
+```bash
+git checkout main
+git pull origin main
+git merge upstream/main
+# コンフリクトがあれば解消 → commit
+git push origin main
+```
+
+### 取り込み時の注意
+
+- 自分の改造（パス・依存・独自スクリプト）が衝突しやすい。先にバックアップブランチを切ると安全。
+  `git branch backup/before-upstream-$(date +%Y%m%d)`
+- 衝突したら公式側を盲目的に優先せず、**自分の学習 PC 用改造を残すか**を判断する。
+- 取り込み後は、インストール手順・学習が一通り通るか確認してから次の改造に進む。
+- 大きなファイル・データセット・学習成果物は git に入れない（.gitignore を確認）。
+
+---
+
+## よく使うコマンド早見
+
+```bash
+# 状態
+git status -sb
+git remote -v
+git log --oneline -5
+
+# 公式の進み具合だけ見る（まだ merge しない）
+git fetch upstream
+git log --oneline main..upstream/main | head -30
+
+# 公式を取り込む（大幅更新のときだけ）
+git checkout main && git merge upstream/main && git push origin main
+
+# 自分の fork へ push
+git push -u origin HEAD
+
+# ブランチ一覧
+git branch -vv
+```
+
+---
+
+## Python 環境（Miniconda）
+
+**uv は使わない。** LeIsaac / Isaac Lab 公式は conda 前提。この PC は Miniconda。
+
+```text
+インストール先: ~/miniconda3
+環境名:
+  leisaac       Python 3.11 … Isaac 用（NVIDIA 差し替え後。いまは空に近い）
+  lerobot-rocm  Python 3.12 … 学習用（Radeon / ROCm。kevineen/lerobot を editable）
+```
+
+起動（新しいシェルでも）:
+
+```bash
+# bashrc に conda init 済み。初回だけ再ログイン or:
+source ~/miniconda3/etc/profile.d/conda.sh
+
+# 学習（Radeon）
+conda activate lerobot-rocm
+python --version   # 3.12.x であること
+
+# Isaac（NVIDIA 差し替え後）
+conda activate leisaac
+python --version   # 3.11.x であること
+```
+
+公式 Install from Source の残りは **今は実行しない**（R9700）。手順は「B: Isaac Sim」の差し替え後セクションに集約した。
+
+### GPU 方針（確定）
+
+- **現状**: AMD Radeon AI PRO R9700（ROCm / gfx1201）。
+- **学習 (A / C)**: `lerobot-rocm` で可。PyTorch `2.11.0+rocm7.14.1`（gfx1201 wheel）。デバイス名は ROCm でも `cuda`（`--policy.device=rocm` も `cuda` に正規化）。
+- **Isaac Sim (B)**: 動かない。CUDA / isaacsim / `isaaclab.sh --install` は **NVIDIA 差し替えまで入れない**。既存 `leisaac` env に ROCm torch を混ぜない。手順は次節。
+- **lerobot 本格 ROCm 対応 (C)**: `feat/rocm-train`。device_utils の ROCm 明示、groot は flash-attn スキップ / SDPA、torchcodec は **入れない**（PyAV）。
+
+#### B: Isaac Sim（この PC では動かない）
+
+Isaac Sim / Isaac Lab は NVIDIA GPU + CUDA 前提。R9700 / ROCm では起動しない。
+**MuJoCo など別シミュレータへの置き換えはしない**（LeIsaac のタスク・USD・変換経路の価値が落ちるため）。
+
+取れる道は次の2つ。併用してもよい。
+
+##### 1. 推奨運用: 別 NVIDIA 機 / クラウドで Sim、この PC は学習のみ
+
+```text
+[NVIDIA 機 or クラウド]
+  conda env leisaac (Python 3.11)
+  Isaac Sim / Isaac Lab で収集 → HDF5
+  isaaclab2lerobotv3.py で LeRobot Dataset 化
+  成果を共有 HDD or rsync / Hub へ
+
+[この PC / R9700]
+  conda env lerobot-rocm (Python 3.12)
+  HF_LEROBOT_HOME=/mnt/shared_hdd/robot/datasets/lerobot
+  lerobot-train（ACT / SmolVLA / diffusion / pi …）
+  CKPT は ROBOT_MODELS_CHECKPOINTS → ラズパイへ
+```
+
+別機側の要点:
+
+- `MACHINE_ROLE=training` / `GPU_VENDOR=auto`（NVIDIA なら Isaac が有効）。
+- データルートを揃える（同じ `ROBOT_DATA_ROOT` か、変換後だけこの PC の HDD へコピー）。
+- 学習は **この PC の `lerobot-rocm`** で行う（別機で CUDA 学習してもよいが、fork の ROCm 改造はこちらが本体）。
+- クラウド例: NVIDIA GPU 付き VM に同じ `kevineen/leisaac` を clone → 下の「差し替え後の再開手順」と同じインストール。
+
+受け渡し例:
+
+```bash
+# 別機 → この PC（データセットだけ）
+rsync -avh --progress user@nvidia-box:/mnt/data/robot/datasets/lerobot/my_task/ \
+  /mnt/shared_hdd/robot/datasets/lerobot/my_task/
+```
+
+##### 2. この PC を NVIDIA に差し替えたあとの再開手順
+
+差し替え後も `.env.local` の `GPU_VENDOR=auto` のままでよい。`source scripts/env/load_env.sh` し直すと `ISAAC_SUPPORTED=1` になる想定。
+
+```bash
+# 1) ドライバ
+nvidia-smi   # 失敗したらプロプライエタリ NVIDIA ドライバを入れて再起動
+
+# 2) Isaac 用 env（Python 3.11）。ROCm torch は入れない
+source ~/miniconda3/etc/profile.d/conda.sh
+conda activate leisaac
+python --version   # 3.11.x
+
+conda install -c "nvidia/label/cuda-12.8.1" cuda-toolkit
+pip install -U torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu128
+pip install --upgrade pip
+pip install "isaacsim[all,extscache]==5.1.0" --extra-index-url https://pypi.nvidia.com
+sudo apt install cmake build-essential
+
+cd ~/robot/leisaac/dependencies/IsaacLab
+./isaaclab.sh --install
+
+cd ~/robot/leisaac
+pip install -e source/leisaac
+# lerobot は公式 optional の 0.4.2 ではなく、学習は引き続き lerobot-rocm 側の fork を使う
+# pip install -e "source/leisaac[lerobot]"  # ← 使わない
+
+# 3) 動作確認
+source ~/robot/leisaac/scripts/env/load_env.sh --force
+leisaac_env_info          # GPU_BACKEND=nvidia / ISAAC_SUPPORTED=1
+leisaac_require_isaac     # 成功すること
+```
+
+差し替え後も学習は `lerobot-rocm` のままでよい（Radeon を外すなら CUDA の lerobot env を別途作る）。Sim 収集だけ `leisaac` env。
+
+**今の R9700 のままでは上記を実行しない。** `leisaac` env に CUDA wheel を入れると壊れる。
+
+#### 学習 env の使い方（`lerobot-rocm`）
+
+公式 PyPI の `lerobot` は使わない。自分の fork（`~/robot/lerobot` / origin: kevineen）を editable で入れる。ブランチ: `feat/rocm-train`。
+
+```bash
+source ~/miniconda3/etc/profile.d/conda.sh
+conda activate lerobot-rocm
+
+# llama.cpp 等が VRAM を占有していると OOM になる。学習前に止める。
+# 例: pgrep -af llama-server
+
+export HF_LEROBOT_HOME=/mnt/shared_hdd/robot/datasets/lerobot
+export WANDB_MODE=disabled
+export TORCH_BLAS_PREFER_HIPBLASLT=0   # gfx1201 の hipblasLt 警告回避
+
+python -c "import torch, lerobot, inspect; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0)); print(inspect.getfile(lerobot))"
+# 期待: 2.11.0+rocm7.14.1  True  AMD Radeon AI PRO R9700
+#       /home/kevin/robot/lerobot/src/lerobot/__init__.py
+```
+
+再インストール（torch は AMD index を忘れない）:
+
+```bash
+conda activate lerobot-rocm
+pip install --index-url https://repo.amd.com/rocm/whl-multi-arch/ \
+  "torch[device-gfx1201]==2.11.0+rocm7.14.1" \
+  "torchvision[device-gfx1201]==0.26.0+rocm7.14.1"
+pip install "numpy>=2.0.0,<2.3.0"
+pip install -e "/home/kevin/robot/lerobot[training,smolvla]" \
+  --extra-index-url https://repo.amd.com/rocm/whl-multi-arch/
+```
+
+スモーク確認済み（2026-09-06）:
+
+```bash
+# ACT 50 step → CKPT: /mnt/shared_hdd/robot/models/checkpoints/act-rocm-smoke
+# SmolVLA 10 step → CKPT: /mnt/shared_hdd/robot/models/checkpoints/smolvla-rocm-smoke
+# diffusion 10 step → CKPT: /mnt/shared_hdd/robot/models/checkpoints/diffusion-rocm-smoke
+```
+
+追加スモーク:
+
+```bash
+# diffusion extra
+pip install -e "/home/kevin/robot/lerobot[training,diffusion]" \
+  --extra-index-url https://repo.amd.com/rocm/whl-multi-arch/
+
+lerobot-train \
+  --policy.type=diffusion \
+  --policy.device=cuda \
+  --policy.push_to_hub=false \
+  --dataset.repo_id=lerobot/pusht \
+  --dataset.video_backend=pyav \
+  --output_dir=/mnt/shared_hdd/robot/models/checkpoints/diffusion-rocm-smoke \
+  --steps=10 --batch_size=4 --num_workers=2 --log_freq=5 \
+  --eval_freq=0 --save_freq=10 --wandb.enable=false
+
+# pi extra は入る。pi0 学習は google/paligemma-3b-pt-224 が gated。
+# HF にログインしてアクセス許可したあと:
+# pip install -e "/home/kevin/robot/lerobot[training,pi]" --extra-index-url https://repo.amd.com/rocm/whl-multi-arch/
+# huggingface-cli login
+lerobot-train \
+  --policy.type=pi0 \
+  --policy.device=cuda \
+  --policy.push_to_hub=false \
+  --dataset.repo_id=lerobot/pusht \
+  --dataset.video_backend=pyav \
+  --output_dir=/mnt/shared_hdd/robot/models/checkpoints/pi0-rocm-smoke \
+  --steps=5 --batch_size=1 --num_workers=0 --log_freq=1 \
+  --eval_freq=0 --save_freq=5 --wandb.enable=false
+```
+
+注意:
+
+- `torchcodec` は **入れない**（PyPI は CUDA ABI。ソースビルドもしない）。動画は fork の **native PyAV**。
+- `--policy.device=cuda` でよい。`rocm` と書いても内部で `cuda` に正規化される。
+- groot は `flash-attn` を入れない。ROCm では SDPA。CUDA 機だけ任意で `pip install flash-attn`。
+- ROCm torchvision には `VideoReader` が無い。
+- llama.cpp（Qwen 27B 等）と同時に GPU 学習すると VRAM 不足。どちらか一方。
+- HDF5→LeRobot 変換（`isaaclab2lerobotv3.py`）は Isaac 必須。データは別 NVIDIA 機 / Hub / 実機 `lerobot-record`。
+
+---
+
+## データ・モデル保存パス / マシン設定（.env.local）使い方
+
+大容量は git 外の共有 HDD に置く（作成済み）。**マシンごとのパス・役割・GPU は `.env.local` で管理する**（`.gitignore` 済み・git に乗せない）。
+
+関連ファイル:
+
+| ファイル | 内容 |
+|----------|------|
+| `.env.example` | テンプレート（git 管理） |
+| `.env.local` | このマシン専用の実設定（git 外） |
+| `scripts/env/load_env.sh` | シェル用の読込・ヘルパー |
+| `scripts/env/show_env.sh` | 解決結果を表示するだけ |
+| `source/leisaac/leisaac/utils/machine_config.py` | Python 用の同設定 |
+
+### 1. 初回セットアップ
+
+```bash
+cd ~/robot/leisaac
+cp .env.example .env.local    # この PC では作成済みなら不要
+nano .env.local               # または好きなエディタで編集
+```
+
+この PC の `.env.local` の要点:
+
+```text
+MACHINE_NAME=training-pc-linux
+MACHINE_ROLE=training
+MACHINE_OS=linux
+GPU_VENDOR=auto          # 自動判定（現状 AMD → あとで NVIDIA 差し替え後も auto のまま）
+ISAAC_ENABLED=auto
+ROBOT_DATA_ROOT=/mnt/shared_hdd/robot
+LEROBOT_REPO=/home/kevin/robot/lerobot
+```
+
+他マシンでは `MACHINE_OS` / `MACHINE_ROLE` / `ROBOT_DATA_ROOT` だけ変えればよい。
+
+| マシン例 | MACHINE_OS | MACHINE_ROLE | ROBOT_DATA_ROOT 例 |
+|----------|------------|--------------|-------------------|
+| この PC（学習） | linux | training | `/mnt/shared_hdd/robot` |
+| Windows 学習機 | windows | training | `D:/robot` など |
+| ラズパイ4 | raspberrypi | teleop | `/mnt/usb_ssd/robot` など |
+
+### 2. 毎回の使い方（シェル）
+
+作業を始めるターミナルで:
+
+```bash
+cd ~/robot/leisaac
+source scripts/env/load_env.sh
+leisaac_env_info                 # パス・GPU・Isaac 可否を確認
+# 同等: bash scripts/env/show_env.sh
+```
+
+よく使うコマンド:
+
+```bash
+leisaac_env_info                 # 現在の解決結果を表示
+leisaac_gpu_smi                  # NVIDIA→nvidia-smi / AMD→rocm-smi
+leisaac_require_isaac            # Isaac 不可なら非ゼロ終了（スクリプトのガード用）
+leisaac_mkdir_data               # datasets / models / assets などディレクトリ作成
+leisaac_use_data_root /mnt/other/robot   # このシェルだけ別ドライブへ切替
+```
+
+任意でログイン時に自動読込:
+
+```bash
+# ~/.bashrc に追記
+source "$HOME/robot/leisaac/scripts/env/load_env.sh"
+```
+
+注意: `ROBOT_DATA_ROOT=/tmp/x source scripts/env/load_env.sh` の書き方は bash の都合で残らないことがある。
+恒久変更は `.env.local`、一時変更は `leisaac_use_data_root` を使う。
+
+### 3. 別ドライブ・大容量データの置き方
+
+- **恒久**: `.env.local` の `ROBOT_DATA_ROOT` を変更 → 再 `source scripts/env/load_env.sh`
+- **このシェルだけ**: `leisaac_use_data_root /mnt/other/robot`
+- `ROBOT_DATA_ROOT` を変えると、下の派生パスもまとめて切り替わる（個別上書きも可）
+
+`ROBOT_DATA_ROOT` から自動で付くパス:
+
+| 用途 | 環境変数 | この PC での実体 |
+|------|----------|------------------|
+| USD アセット | `LEISAAC_ASSETS_ROOT` | `/mnt/shared_hdd/robot/assets` |
+| 生データ HDF5 | `ROBOT_DATASETS_HDF5` | `/mnt/shared_hdd/robot/datasets/hdf5` |
+| LeRobot DS | `ROBOT_DATASETS_LEROBOT` | `/mnt/shared_hdd/robot/datasets/lerobot` |
+| 学習 CKPT | `ROBOT_MODELS_CHECKPOINTS` | `/mnt/shared_hdd/robot/models/checkpoints` |
+| デプロイ用 | `ROBOT_MODELS_DEPLOY` | `/mnt/shared_hdd/robot/models/deploy` |
+| ログ | `ROBOT_LOGS` | `/mnt/shared_hdd/robot/logs` |
+| エクスポート | `ROBOT_EXPORTS` | `/mnt/shared_hdd/robot/exports` |
+
+個別だけ変えたいとき（例: データセットだけ別ディスク）は `.env.local` に明示:
+
+```bash
+ROBOT_DATA_ROOT=/mnt/shared_hdd/robot
+ROBOT_DATASETS_LEROBOT=/mnt/huge_ssd/lerobot_datasets
+```
+
+ディレクトリ構成（共有 HDD）:
+
+```text
+/mnt/shared_hdd/robot/
+├── datasets/
+│   ├── hdf5/          # シミュ収集の生データ
+│   └── lerobot/       # 変換後 LeRobot Dataset
+├── models/
+│   ├── checkpoints/   # 学習チェックポイント
+│   └── deploy/        # ラズパイへ渡す推論用
+├── assets/
+│   ├── robots/        # USD ロボット（git の assets/ は空のまま）
+│   └── scenes/        # USD シーン
+├── exports/
+├── logs/
+└── README.txt
+```
+
+リポジトリ内の `assets/`・`datasets/` は `.gitignore` 済み。実体は共有 HDD 側。
+
+### 4. GPU の自動切替
+
+`.env.local` で `GPU_VENDOR=auto`（推奨）。起動時にハードを見て解決する。
+
+| 判定 | `GPU_BACKEND` | `leisaac_gpu_smi` | Isaac (`ISAAC_SUPPORTED`) |
+|------|---------------|-------------------|---------------------------|
+| NVIDIA | nvidia | `nvidia-smi` | 1（`MACHINE_ROLE=training` 時） |
+| AMD Radeon / ROCm | amd | `rocm-smi` | 0（Sim は保留。学習は `lerobot-rocm`） |
+| なし（ラズパイ等） | none | （失敗） | 0 |
+
+手動固定したいとき: `GPU_VENDOR=nvidia` / `amd` / `none`。
+Isaac を無理に有効/無効にするとき: `ISAAC_ENABLED=true` / `false`（通常は `auto`）。
+
+この PC の現状: **AMD → `ISAAC_SUPPORTED=0`**（Sim 不可）。学習は `conda activate lerobot-rocm`。NVIDIA 差し替え後は `auto` のまま再 `source` すれば Isaac が `1` になる想定。
+
+### 5. Python から使う
+
+```python
+from leisaac.utils.machine_config import ensure_machine_env
+
+cfg = ensure_machine_env()
+print(cfg.robot_data_root)
+print(cfg.datasets_lerobot)
+print(cfg.gpu_backend, cfg.isaac_supported)
+```
+
+`leisaac.utils.constant.ASSETS_ROOT` も `.env.local` の `LEISAAC_ASSETS_ROOT` を自動で拾う。
+
+---
+
+## lerobot fork との接続
+
+| 項目 | 値 |
+|------|-----|
+| ローカル | `~/robot/lerobot` |
+| origin | `kevineen/lerobot` |
+| upstream | `huggingface/lerobot` |
+| 学習ブランチ | `feat/rocm-train`（kevineen/lerobot。本家 PR しない） |
+| fork の版 | **0.5.2** / `requires-python >=3.12` |
+| LeIsaac 公式 optional | `lerobot==0.4.2`（PyPI）← **使わない** |
+
+方針: `pip install -e "source/leisaac[lerobot]"` は使わず、**自分の fork を `lerobot-rocm` に editable インストール済み**。
+
+```bash
+conda activate lerobot-rocm
+pip install -e "/home/kevin/robot/lerobot[training,smolvla]" \
+  --extra-index-url https://repo.amd.com/rocm/whl-multi-arch/
+```
+
+### 残っている互換ギャップ（Isaac 接続）
+
+1. **Python 二系統**: Isaac は 3.11（`leisaac`）、学習は 3.12（`lerobot-rocm`）。混ぜない。
+2. **版**: 公式 LeIsaac は 0.4.2 想定、fork は 0.5.2。Isaac 推論接続時に API 差分が出たら合わせる。
+
+C（ROCm 学習コア）は `feat/rocm-train` で実装済み:
+
+- `device_utils`: ROCm 明示ログ、`rocm`/`hip` → `cuda`、AMP は `cuda:N` 対応、attn は SDPA フォールバック
+- groot: flash-attn を extra から外し、Eagle は SDPA
+- torchcodec: extra に入れない。デフォルトデコーダは PyAV
+
+---
+
+## 今後やること（チェックリスト）
+
+- [x] Miniconda インストール + `leisaac` (Python 3.11) 作成
+- [x] IsaacLab submodule 初期化（v2.3.0）
+- [x] データ・モデルの保存パス方針（`/mnt/shared_hdd/robot/...`）
+- [x] `.env.local` + `scripts/env/load_env.sh` + `machine_config.py`（パス / 役割 / GPU 切替）
+- [x] lerobot fork 接続（kevineen/lerobot を `lerobot-rocm` に editable）
+- [x] GPU 方針: Isaac は NVIDIA 差し替えまで保留。学習は Radeon / ROCm で先行
+- [x] `lerobot-rocm`（Python 3.12 + PyTorch ROCm gfx1201）+ kevineen/lerobot editable
+- [x] ACT / SmolVLA スモーク学習（CKPT は `models/checkpoints/*-rocm-smoke`）
+- [x] B: note に「別 NVIDIA 機で Sim / この PC は学習」と「差し替え後再開手順」を固める（MuJoCo は範囲外）
+- [x] C: device_utils の ROCm 明示 / groot SDPA / torchcodec は入れない
+- [x] 任意: diffusion 10 step スモーク（`diffusion-rocm-smoke`）
+- [ ] 任意: pi0 スモーク（gated `google/paligemma-3b-pt-224`。HF login + アクセス許可が先）
+- [ ] NVIDIA 差し替え後 **または** 別 NVIDIA 機: CUDA / isaacsim / IsaacLab / leisaac インストール（B の手順）
+- [x] 最初の改造（パス・設定・依存・ROCm 方針・ドキュメント）を commit / push（origin のみ。本家 PR しない）
+- [ ] 任意: `~/.bashrc` に `source ~/robot/leisaac/scripts/env/load_env.sh` を追記
+- [ ] 公式の大幅更新時に、sync ブランチでの取り込みを一度試す
+- [ ] ラズパイへのモデル受け渡し手順を追記（`models/deploy` → パイ）
+
+---
+
+## トラブルシュート
+
+| 症状 | 対処 |
+|------|------|
+| push で Authentication failed (HTTPS) | origin を SSH URL にしているか確認。ssh-add する |
+| Permission denied (publickey) | ssh-add ~/.ssh/id_ed25519 → ssh -T git@github.com |
+| upstream merge で衝突 | 衝突ファイルを手で直し、自分の改造を残すか判断 → git add → git commit |
+| 取り込みで壊れた | `backup/before-upstream-*` に戻すか、sync ブランチを捨ててやり直す |
+| 巨大ファイルを誤って add | commit 前に git reset。必要なら .gitignore に追加 |
+| 誤って本家向け PR を作りそう | 作らない。push 先は常に origin（kevineen/leisaac） |
+| `.env.local` が無い / パスがリポジトリ内のまま | `cp .env.example .env.local` → 編集 → `source scripts/env/load_env.sh` |
+| `leisaac_env_info` が未定義 | 先に `source scripts/env/load_env.sh` する |
+| GPU 判定が違う | `.env.local` で `GPU_VENDOR=nvidia` または `amd` に固定 |
+| 別ドライブに切り替えたのにパスが戻る | `VAR=... source` は使わず `leisaac_use_data_root` か `.env.local` を編集 |
+| 学習が CUDA OOM（VRAM 0 bytes free） | llama.cpp / LM Studio が GPU を占有していないか。`pgrep -af llama-server` → 止めてから再実行 |
+| `torchvision.io.VideoReader` が無い | ROCm torchvision の制限。`--dataset.video_backend=pyav`（fork の native PyAV） |
+| `pip` が公式 CUDA torch に戻す | `--extra-index-url https://repo.amd.com/rocm/whl-multi-arch/` を付ける。`leisaac` env に ROCm torch を入れない |
+| `flash-attn` が入らない / undefined symbol | ROCm では入れない。groot は SDPA。CUDA 機だけ任意インストール |
+| `torchcodec` で落ちる | 入れない。uninstall して `video_backend=pyav` |
+| Isaac Sim が起動しない（R9700） | 仕様。別 NVIDIA 機か差し替え後。MuJoCo 置き換えはしない |
+| pi0 が gated repo で落ちる | `google/paligemma-3b-pt-224`。HF で許可 → `huggingface-cli login`。ROCm とは別件 |

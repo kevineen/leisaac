@@ -1,5 +1,9 @@
 # Policy Training & Inference
 
+::::info[This fork]
+Training on the R9700 PC uses [kevineen/lerobot](https://github.com/kevineen/lerobot) `0.5.2` (`feat/rocm-train`) in `lerobot-rocm`, not `pip install lerobot==0.3.3` / `0.4.2`. HDF5 conversion still needs Isaac, so run it on an NVIDIA machine. See [Fork: training PC](/docs/getting_started/fork_training_pc).
+::::
+
 ## 1. Data Convention
 
 Collected teleoperation data is stored in HDF5 format in the specified directory. We provide a script to convert HDF5 data to the LeRobot Dataset format. Only successful episode will be converted.

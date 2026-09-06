@@ -2,6 +2,10 @@
 
 The fastest way to get started with LeIsaac — you don't need a high-performance GPU, just a web browser.
 
+::::info[This fork]
+On AMD Radeon training PCs, use Brev (or any NVIDIA cloud VM) as the **Isaac Sim machine**. Copy the resulting LeRobot dataset to the training PC and train with `lerobot-rocm`. Do not install Isaac Sim on the R9700. See [Fork: training PC](/docs/getting_started/fork_training_pc).
+::::
+
 Open a web browser and navigate to this [link](https://brev.nvidia.com/launchable/deploy/now?launchableID=env-35P96N3pyzVDW3Xlohy7X2TuLCX). After the deployment is complete, click the link for port 80 (HTTP) to open Visual Studio Code Server. The default password is `password`.
 
 Quick install:

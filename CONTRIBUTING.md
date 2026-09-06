@@ -2,6 +2,12 @@
 
 Thanks for your interest in contributing to LeIsaac! This document describes how to report issues, propose changes, and submit pull requests.
 
+## This fork (kevineen/leisaac)
+
+日常の改造は **この fork だけ** に push する。公式 `LightwheelAI/leisaac` へはプルリクを出さない。公式の大きな更新は `upstream/main` から必要なときだけ取り込む。手順はリポジトリ直下の [note.txt](note.txt) を参照。
+
+本家向けの貢献をする場合は、公式リポジトリ側の CONTRIBUTING に従う。
+
 ## Code of conduct
 
 Be respectful and constructive. Assume good intent.

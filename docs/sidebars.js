@@ -35,6 +35,12 @@ const sidebars = {
         },
         {
           type: 'category',
+          label: 'Fork: training PC',
+          link: { type: 'doc', id: 'docs/getting_started/fork_training_pc' },
+          items: [],
+        },
+        {
+          type: 'category',
           label: 'Teleoperation',
           link: { type: 'doc', id: 'docs/getting_started/teleoperation' },
           items: [],

@@ -14,7 +14,20 @@ def _detect_git_root() -> Path:
 
 
 def _resolve_assets_root() -> str:
-    """Return env override if provided, otherwise default assets directory."""
+    """Return env override if provided, otherwise default assets directory.
+
+    Loads ``.env.local`` via machine_config when LEISAAC_ASSETS_ROOT is unset,
+    so dataset/asset roots can live on an external drive per machine.
+    """
+    # Apply machine-local .env before reading LEISAAC_ASSETS_ROOT
+    try:
+        from leisaac.utils.machine_config import ensure_machine_env
+
+        ensure_machine_env()
+    except Exception:
+        # Keep import light if machine_config is unavailable during partial installs
+        pass
+
     env_root = os.environ.get("LEISAAC_ASSETS_ROOT")
     if env_root:
         return Path(env_root).expanduser().resolve().as_posix()

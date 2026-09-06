@@ -1,5 +1,9 @@
 # LeIsaac 🚀
 
+> **このリポジトリは [kevineen/leisaac](https://github.com/kevineen/leisaac) fork です。公式 (LightwheelAI) へは PR しません。**
+> 学習 PC（AMD Radeon / ROCm）向けのパス・GPU 切替・Isaac 運用は [note.txt](note.txt) と [Fork: training PC](docs/docs/docs/getting_started/fork_training_pc.md) を見てください。
+> Isaac Sim は NVIDIA + CUDA 前提です。R9700 では動きません（MuJoCo 置き換えは範囲外）。
+
 https://github.com/user-attachments/assets/763acf27-d9a9-4163-8651-3ba0a6a185d7
 
 This repository provides teleoperation functionality in [IsaacLab](https://isaac-sim.github.io/IsaacLab/main/index.html) using the SO101Leader ([LeRobot](https://github.com/huggingface/lerobot)), including data collection, data conversion, and subsequent policy training.
@@ -37,6 +41,8 @@ Please refer to our [documentation](https://lightwheelai.github.io/leisaac/) to 
 ## Contributing 🤝
 
 Please see [CONTRIBUTING.md](CONTRIBUTING.md) for how to report issues and submit pull requests.
+
+**This fork:** do not open PRs against LightwheelAI/leisaac. Push only to `origin` (kevineen/leisaac).
 
 ## Citation 📝
 
